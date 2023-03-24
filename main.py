@@ -5,9 +5,14 @@
 import sys
 from collections import OrderedDict
 
-var_file = sys.argv[1]
-con_file = sys.argv[2]
-procedure = sys.argv[3]
+if len(sys.argv) == 4:
+    var_file = sys.argv[1]
+    con_file = sys.argv[2]
+    procedure = sys.argv[3]
+else:
+    var_file = sys.argv[1]
+    con_file = sys.argv[2]
+    procedure = ""
 
 variables = {}
 constraints = []
@@ -100,7 +105,7 @@ def is_complete(assignment):
     return True
 
 
-def assignment_consistent(assignment, val, ordered_var, overall_constraints, assignment_order):
+def assignment_consistent(assignment, val, ordered_var, overall_constraints, assignment_order, variables):
     var, domain = ordered_var
     for a in assignment:
         if assignment[a] != None:
@@ -174,21 +179,98 @@ def backtracking(assignment, variables, constraints, overall_constraints, assign
     assignment_order.append(ordered_var[0])
 
     for val in order_domain_values:
-        if assignment_consistent(assignment, val, ordered_var, overall_constraints, assignment_order):
+        if assignment_consistent(assignment, val, ordered_var, overall_constraints, assignment_order, variables):
             assignment[ordered_var[0]] = val
-    
             result = backtracking(assignment.copy(), variables.copy(), current_constraints.copy(), overall_constraints, assignment_order.copy())
-            
             if result != "FAILURE":
                 return result
-
-
             assignment[ordered_var[0]] = None
 
     return "FAILURE"
 
-def forwardChecking():
-    pass
+def delete_domain_values(unassigned_variables, constraints, assigned_var, val):
+
+    for unassigned_var in unassigned_variables:
+        new_domain = []
+        involved_count = 0
+        for d in unassigned_variables[unassigned_var]:
+            for const in constraints:
+                if assigned_var in const and unassigned_var in const:
+                    involved_count += 1
+                    const_list = const.split(" ")
+                    var_and_value = {}
+
+                    if assigned_var == const_list[0]:
+                        var_and_value[ "first_var"] = val
+                        var_and_value[ "second_var"] = d
+                    else:
+                        var_and_value[ "first_var"] = d
+                        var_and_value[ "second_var"] = val
+                    
+                    if const_list[1] == '!':
+                        if var_and_value[ "first_var"] != var_and_value[ "second_var"]:
+                            new_domain.append(d)
+
+                    elif const_list[1] == '>':
+                        if var_and_value[ "first_var"] > var_and_value[ "second_var"]:
+                            new_domain.append(d)
+
+                    elif const_list[1] == '<':
+                        if var_and_value[ "first_var"] < var_and_value[ "second_var"]:
+                            new_domain.append(d)
+
+                    elif const_list[1] == '=':
+                        if var_and_value[ "first_var"] == var_and_value[ "second_var"]:
+                            new_domain.append(d)
+        if len(new_domain) != 0:
+            unassigned_variables[unassigned_var] = new_domain.copy()
+        if len(new_domain) == 0 and involved_count != 0:
+            unassigned_variables[unassigned_var] = new_domain.copy()
+        
+def forward_checking(assignment, variables, constraints, overall_constraints, assignment_order):
+    global line_counter
+    if is_complete(assignment):
+        print(f"{line_counter+1}. {print_in_order(assignment, assignment_order)}  solution")
+        return assignment
+    
+    ordered_var = most_constrained_var(variables, constraints)
+    # update current unassigned variables and current constraints
+    del variables[ordered_var[0]]
+    current_constraints = []
+    for c in constraints:
+        if ordered_var[0] not in c:
+            current_constraints.append(c)
+
+    order_domain_values = least_constring_val(ordered_var, variables, constraints)
+    assignment_order.append(ordered_var[0])
+
+    for val in order_domain_values:
+        # delete domain values of unassigned variables that are inconsistent with chosen value
+        new_var_and_domain = variables.copy()
+        delete_domain_values(new_var_and_domain, overall_constraints, ordered_var[0], val)
+        to_continue = False
+        for var in new_var_and_domain:
+            if len(new_var_and_domain[var]) == 0:
+                to_continue = True
+                break
+        if to_continue:
+            assignment[ordered_var[0]] = val
+            line_counter += 1
+            print(f"{line_counter}. {print_in_order(assignment, assignment_order)}  failure")
+            assignment[ordered_var[0]] = None
+            continue
+        else:
+            variables = new_var_and_domain.copy()
+        #print(variables)
+        if assignment_consistent(assignment, val, ordered_var, overall_constraints, assignment_order, variables):
+            assignment[ordered_var[0]] = val
+            result = forward_checking(assignment.copy(), variables.copy(), current_constraints.copy(), overall_constraints, assignment_order.copy())
+            if result != "FAILURE":
+                return result
+            assignment[ordered_var[0]] = None
+
+    return "FAILURE"
+
 
 readFile()
 
@@ -197,7 +279,11 @@ assignment = {}
 for v in vars:
     assignment[v] = None
 
-backtracking(assignment, variables, constraints, constraints.copy(), [])
+if procedure == "none" or procedure == "":
+    backtracking(assignment.copy(), variables.copy(), constraints.copy(), constraints.copy(), [])
+elif procedure == "fc":
+    forward_checking(assignment.copy(), variables.copy(), constraints.copy(), constraints.copy(), [])
+
 
 
 
